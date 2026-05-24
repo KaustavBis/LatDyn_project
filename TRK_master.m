@@ -654,95 +654,136 @@ csvfile_b = 'C:\Users\kaust\OneDrive\Desktop\Claude\TRK_1b_turns.csv';
 writetable(T_b, csvfile_b);
 fprintf('Turn table saved: %s\n', csvfile_b);
 
-% =========================================================================
-% MASTER SIMULATION SCRIPT: FULL TRACK LAP (TRK) - COMPREHENSIVE VALIDATION
-% =========================================================================
-g = 9.81; lap_length = 10000;
+%% 10. COMPARATIVE STUDY OF CAR A AND B PERFORMANCE (HISTOGRAMS)
+fprintf('\n===============================================================\n');
+fprintf(' COMPARATIVE STUDY: KINEMATICS & TORQUES (HISTOGRAMS)\n');
+fprintf('===============================================================\n');
 
-%% ── 1. Extract & Limit to 1200s (CAR A) ───────────────
-t_a_full = out_a.tout; idx_1200_a = find(t_a_full <= 1200, 1, 'last');
-t_a  = t_a_full(1:idx_1200_a);
-vx_a = squeeze(out_a.vx_curr_a.Data(1:idx_1200_a));
-vy_a = squeeze(out_a.vy_curr_a.Data(1:idx_1200_a));
-r_a  = squeeze(out_a.r_curr_a.Data(1:idx_1200_a));
-X_a  = squeeze(out_a.X_curr_a.Data(1:idx_1200_a));
-Y_a  = squeeze(out_a.Y_curr_a.Data(1:idx_1200_a));
-s_a  = squeeze(out_a.s_a.Data(1:idx_1200_a));
-T_RL_a = squeeze(out_a.Trl_m_a.Data(1:idx_1200_a)); 
-T_RR_a = squeeze(out_a.Trr_m_a.Data(1:idx_1200_a));
-ay_raw_a = -(vx_a .* r_a);
-Ay_G_a   = abs(ay_raw_a) / g; beta_a = atan2(vy_a, max(vx_a, 0.1)) * (180/pi);      
+% ... [Keep your data prep and calculation loops exactly as they were] ...
 
-%% ── 2. Extract & Limit to 1200s (CAR B) ───────────────
-t_b_full = out_b.tout; idx_1200_b = find(t_b_full <= 1200, 1, 'last'); 
-t_b  = t_b_full(1:idx_1200_b);
-vx_b = squeeze(out_b.vx_curr_b.Data(1:idx_1200_b));
-vy_b = squeeze(out_b.vy_curr_b.Data(1:idx_1200_b));
-r_b  = squeeze(out_b.r_curr_b.Data(1:idx_1200_b));
-X_b  = squeeze(out_b.X_curr_b.Data(1:idx_1200_b));
-Y_b  = squeeze(out_b.Y_curr_b.Data(1:idx_1200_b));
-s_b  = squeeze(out_b.s_b.Data(1:idx_1200_b));
-T_RL_b = squeeze(out_b.Trl_fric_b.Data(1:idx_1200_b)); 
-T_RR_b = squeeze(out_b.Trr_fric_b.Data(1:idx_1200_b)); 
-T_M_b  = squeeze(out_b.Trl_m_b.Data(1:idx_1200_b)) * 2;  
-ay_raw_b = -(vx_b .* r_b);
-Ay_G_b   = abs(ay_raw_b) / g; beta_b = atan2(vy_b, max(vx_b, 0.1)) * (180/pi);      
+% ── 3. FIGURE 1: KINEMATICS HISTOGRAMS ─────────────────────────────────
+fig_comp1 = figure('Name','Car A vs Car B: Kinematics','Position',[50 50 1000 900], 'Color', 'w');
 
-%% ── 3. Cluster Turns (Using Car A as reference) ───────────────
-in_turn_a = Ay_G_a > 0.3;
-edges_a = diff([0; in_turn_a; 0]);
-turn_starts_a = find(edges_a == 1); turn_ends_a = find(edges_a == -1) - 1;
-valid_a = (t_a(turn_ends_a) - t_a(turn_starts_a)) >= 0.4;
-turn_starts_a = turn_starts_a(valid_a); turn_ends_a = turn_ends_a(valid_a);
-N_turns = numel(turn_starts_a);
+% (A) Lateral Acceleration
+subplot(3,1,1);
+b_ay = bar(1:N_corners, [ay_a_comp(:), ay_b_comp(:)], 'grouped');
+b_ay(1).FaceColor = [0.2 0.5 0.8]; b_ay(2).FaceColor = [0.8 0.2 0.2];
+title('Average Lateral Acceleration (ay) per Corner'); ylabel('ay (m/s^2)');
+legend('Car A (Blue)', 'Car B (Red)', 'Location', 'northeastoutside');
+grid(gca, 'on'); xlim(gca, [0.5, N_corners+0.5]); set(gca, 'XColor', 'k', 'YColor', 'k');
+% Demarcation
+yl = ylim; yl_new = [yl(1), yl(2) + (yl(2)-yl(1))*0.08]; ylim(yl_new);
+for i=0.5:1:N_corners+0.5; xline(i, ':', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.5, 'HandleVisibility', 'off'); end
+for c=1:N_corners; text(c, yl_new(2)-(yl_new(2)-yl_new(1))*0.02, sprintf('C%d', c), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 11, 'Color', 'k'); end
 
-% Group by Corner ID (Clustering)
-R_cluster = 120; cluster_xy = []; corner_id_a = zeros(N_turns, 1);
-for k = 1:N_turns
-    Xc = mean(X_a(turn_starts_a(k):turn_ends_a(k)));
-    Yc = mean(Y_a(turn_starts_a(k):turn_ends_a(k)));
-    if isempty(cluster_xy); cluster_xy(end+1,:) = [Xc, Yc]; corner_id_a(k) = 1;
-    else
-        [d_min, c_idx] = min(sqrt((cluster_xy(:,1)-Xc).^2 + (cluster_xy(:,2)-Yc).^2));
-        if d_min < R_cluster; corner_id_a(k) = c_idx;
-        else; cluster_xy(end+1,:) = [Xc, Yc]; corner_id_a(k) = size(cluster_xy, 1); end
-    end
-end
-N_corners = size(cluster_xy, 1);
+% (B) Lateral Velocity
+subplot(3,1,2);
+b_vy = bar(1:N_corners, [vy_a_comp(:), vy_b_comp(:)], 'grouped');
+b_vy(1).FaceColor = [0.2 0.5 0.8]; b_vy(2).FaceColor = [0.8 0.2 0.2];
+title('Average Lateral Velocity (vy) per Corner'); ylabel('vy (m/s)');
+grid(gca, 'on'); xlim(gca, [0.5, N_corners+0.5]); set(gca, 'XColor', 'k', 'YColor', 'k');
+yl = ylim; yl_new = [yl(1), yl(2) + (yl(2)-yl(1))*0.08]; ylim(yl_new);
+for i=0.5:1:N_corners+0.5; xline(i, ':', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.5, 'HandleVisibility', 'off'); end
+for c=1:N_corners; text(c, yl_new(2)-(yl_new(2)-yl_new(1))*0.02, sprintf('C%d', c), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 11, 'Color', 'k'); end
 
-%% ── 4. Calculate Per-Corner Aggregates ───────────────
-% Prepare containers
-apex_a = zeros(N_corners,1); apex_b = zeros(N_corners,1);
-trl_a = zeros(N_corners,1); trr_a = zeros(N_corners,1);
-trl_b = zeros(N_corners,1); trr_b = zeros(N_corners,1); tm_b = zeros(N_corners,1);
+% (C) Sideslip
+subplot(3,1,3);
+b_beta = bar(1:N_corners, [beta_a_comp(:), beta_b_comp(:)], 'grouped');
+b_beta(1).FaceColor = [0.2 0.5 0.8]; b_beta(2).FaceColor = [0.8 0.2 0.2];
+title('Average Sideslip Angle (\beta) per Corner'); ylabel('\beta (deg)'); xlabel('Corner ID');
+grid(gca, 'on'); xlim(gca, [0.5, N_corners+0.5]); set(gca, 'XColor', 'k', 'YColor', 'k');
+yl = ylim; yl_new = [yl(1), yl(2) + (yl(2)-yl(1))*0.08]; ylim(yl_new);
+for i=0.5:1:N_corners+0.5; xline(i, ':', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.5, 'HandleVisibility', 'off'); end
+for c=1:N_corners; text(c, yl_new(2)-(yl_new(2)-yl_new(1))*0.02, sprintf('C%d', c), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 11, 'Color', 'k'); end
+
+% ── 4. FIGURE 2: SPEED & TORQUE ─────────────────────────────────────────
+fig_comp2 = figure('Name','Comparative Study: Speed & Torques','Position',[600 50 1000 800], 'Color', 'w');
+
+% (A) Apex Speed
+subplot(2,1,1);
+b_spd2 = bar(1:N_corners, [apex_a_comp(:), apex_b_comp(:)], 'grouped');
+b_spd2(1).FaceColor = [0.2 0.5 0.8]; b_spd2(2).FaceColor = [0.8 0.2 0.2]; 
+title('Turn-by-Turn Apex Speed Comparison'); ylabel('Speed (km/h)');
+legend('Car A (Dual Motor)', 'Car B (Single Motor)', 'Location', 'northeastoutside');
+grid(gca, 'on'); xlim(gca, [0.5, N_corners+0.5]); set(gca, 'XColor', 'k', 'YColor', 'k');
+yl = ylim; yl_new = [yl(1), yl(2) + (yl(2)-yl(1))*0.08]; ylim(yl_new);
+for i=0.5:1:N_corners+0.5; xline(i, ':', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.5, 'HandleVisibility', 'off'); end
+for c=1:N_corners; text(c, yl_new(2)-(yl_new(2)-yl_new(1))*0.02, sprintf('C%d', c), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 11, 'Color', 'k'); end
+
+% (B) Torque
+subplot(2,1,2);
+tq_data_comp = [trl_a_comp(:)*10, trr_a_comp(:)*10, trl_b_comp(:), trr_b_comp(:), tm_b_comp(:)*10];
+b_tq2 = bar(1:N_corners, tq_data_comp, 'grouped');
+b_tq2(1).FaceColor = [0.2 0.6 0.5]; b_tq2(2).FaceColor = [0.8 0.5 0.1];
+b_tq2(3).FaceColor = [0.8 0 0]; b_tq2(4).FaceColor = [1 0.4 0]; b_tq2(5).FaceColor = [0.4 0.4 0.4];
+title('Turn-by-Turn Torque Comparison'); xlabel('Corner ID'); ylabel('Torque (Nm)');
+legend('RL_A*10', 'RR_A*10', 'RL_B Brake', 'RR_B Brake', 'M_B*10', 'Location', 'northeastoutside');
+grid(gca, 'on'); xlim(gca, [0.5, N_corners+0.5]); set(gca, 'XColor', 'k', 'YColor', 'k');
+ylim([-2500, 4000]);
+for i=0.5:1:N_corners+0.5; xline(i, ':', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.5, 'HandleVisibility', 'off'); end
+for c=1:N_corners; text(c, 4000 - (6500*0.02), sprintf('C%d', c), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'top', 'FontWeight', 'bold', 'FontSize', 11, 'Color', 'k'); end
+
+%% 11. COMPARATIVE STUDY: LAP 2 ONLY
+fprintf('\n===============================================================\n');
+fprintf(' COMPARATIVE STUDY: LAP 2 ONLY\n');
+fprintf('===============================================================\n');
+
+apex_a_l2 = zeros(N_corners,1); apex_b_l2 = zeros(N_corners,1);
+tq_a_l2   = zeros(N_corners, 2); tq_b_l2   = zeros(N_corners, 3);
+ay_a_l2   = zeros(N_corners,1); ay_b_l2   = zeros(N_corners,1);
+beta_a_l2 = zeros(N_corners,1); beta_b_l2 = zeros(N_corners,1);
 
 for c = 1:N_corners
-    idx_a = find(corner_id_a == c);
-    % Averages for Car A
-    for k = idx_a'
-        i_a = turn_starts_a(k):turn_ends_a(k);
-        apex_a(c) = apex_a(c) + min(vx_a(i_a)*3.6);
-        trl_a(c) = trl_a(c) + mean(T_RL_a(i_a));
-        trr_a(c) = trr_a(c) + mean(T_RR_a(i_a));
+    idx_a = find(corner_id == c & turn_table(:, 2) == 2);
+    idx_b = find(corner_id_b == c & turn_table_b(:, 2) == 2);
+    if any(idx_a)
+        apex_a_l2(c) = mean(turn_table(idx_a, 6));
+        tq_a_l2(c,:) = [mean(turn_table(idx_a, 14)), mean(turn_table(idx_a, 15))];
+        ay_a_l2(c)   = mean(turn_table(idx_a, 8));
+        beta_a_l2(c) = mean(turn_table(idx_a, 9));
     end
-    apex_a(c) = apex_a(c)/length(idx_a); trl_a(c) = trl_a(c)/length(idx_a); trr_a(c) = trr_a(c)/length(idx_a);
-    
-    % Map to Car B (using Car A's distance markers)
-    for k = idx_a'
-        idx_b = find(s_b >= s_a(turn_starts_a(k)) & s_b <= s_a(turn_ends_a(k)));
-        if ~isempty(idx_b)
-            apex_b(c) = apex_b(c) + min(vx_b(idx_b)*3.6);
-            trl_b(c) = trl_b(c) + mean(T_RL_b(idx_b));
-            trr_b(c) = trr_b(c) + mean(T_RR_b(idx_b));
-            tm_b(c) = tm_b(c) + mean(T_M_b(idx_b));
-        end
+    if any(idx_b)
+        apex_b_l2(c) = mean(turn_table_b(idx_b, 6));
+        tq_b_l2(c,1:2) = [mean(turn_table_b(idx_b, 14)), mean(turn_table_b(idx_b, 15))];
+        tq_b_l2(c,3)   = mean(abs(out_b.Trl_m_b.Data * 2));
+        ay_b_l2(c)     = mean(turn_table_b(idx_b, 8));
+        beta_b_l2(c)   = mean(turn_table_b(idx_b, 9));
     end
-    apex_b(c) = apex_b(c)/length(idx_a); trl_b(c) = trl_b(c)/length(idx_a); trr_b(c) = trr_b(c)/length(idx_a); tm_b(c) = tm_b(c)/length(idx_a);
 end
 
-%% ── 5. Global Metrics ───────────────
-all_turn_mask_a = false(size(t_a));
-for k = 1:N_turns; all_turn_mask_a(turn_starts_a(k):turn_ends_a(k)) = true; end
-all_turn_mask_b = false(size(t_b));
-for k = 1:N_turns; idx_b = find(s_b >= s_a(turn_starts_a(k)) & s_b <= s_a(turn_ends_a(k))); if ~isempty(idx_b); all_turn_mask_b(idx_b) = true; end; end
+plot_comparison_dashboard(N_corners, cluster_xy, ay_a_l2, ay_b_l2, zeros(N_corners,1), zeros(N_corners,1), beta_a_l2, beta_b_l2, ...
+    apex_a_l2, apex_b_l2, tq_a_l2, tq_b_l2, X_track, Y_track, X_a, Y_a, X_b, Y_b, 'Section 11: Lap 2');
 
+% ── Local Plotting Function ──
+function plot_comparison_dashboard(N, cluster, ay_a, ay_b, vy_a, vy_b, beta_a, beta_b, apex_a, apex_b, tq_a, tq_b, Xtr, Ytr, Xa, Ya, Xb, Yb, title_str)
+% Kinematics Figure
+figure('Name', [title_str, ' Kinematics'], 'Position', [50 50 1000 800], 'Color', 'w');
+d = {ay_a, ay_b, 'Ay (g)'; vy_a, vy_b, 'Vy (m/s)'; beta_a, beta_b, 'Sideslip (deg)'};
+for s = 1:3
+    subplot(3,1,s); bar(1:N, [d{s,1}, d{s,2}], 'grouped'); title(['Averages: ', d{s,3}]);
+    legend('Car A', 'Car B', 'Location','northeast'); grid on; xlim([0.5 N+0.5]); 
+    for i=0.5:1:N+0.5; xline(i, ':', 'HandleVisibility','off'); end
+    for c=1:N; text(c, max(ylim)*0.9, num2str(c), 'HorizontalAlignment','center', 'FontWeight','bold'); end
+end
+% Perf Figure (Narrow Map, Broad Histograms)
+figure('Name', [title_str, ' Performance'], 'Position', [150 50 1400 700], 'Color', 'w');
+subplot('Position', [0.08 0.12 0.25 0.75]); % Track Narrow
+plot(-Ytr, Xtr, 'k--', 'LineWidth', 1.5, 'HandleVisibility','off'); hold on;
+plot(-Ya, Xa, 'b', 'LineWidth', 1); plot(-Yb, Xb, 'r', 'LineWidth', 1);
+for c=1:N; plot(-cluster(c,2), cluster(c,1), 'ko', 'MarkerFaceColor','y', 'MarkerSize', 6, 'HandleVisibility','off');
+    text(-cluster(c,2), cluster(c,1), num2str(c), 'FontWeight','bold'); end
+title('Track Map'); axis equal; grid on;
+
+subplot('Position', [0.42 0.55 0.5 0.35]); % Speed Broad
+b = bar(1:N, [apex_a, apex_b], 'grouped');
+title('Apex Speed'); ylabel('km/h'); legend('Car A', 'Car B', 'Location','northeast');
+grid on; xlim([0.5 N+0.5]);
+for c=1:N; text(c, max(ylim)*0.9, num2str(c), 'HorizontalAlignment','center', 'FontWeight','bold'); end
+
+subplot('Position', [0.42 0.12 0.5 0.35]); % Torque Broad
+bar(1:N, [tq_a(:,1)*10, tq_a(:,2)*10, tq_b(:,1), tq_b(:,2), tq_b(:,3)*10], 'grouped');
+title('Torque Comparison'); ylabel('Nm'); ylim([-2500, 4000]);
+legend('RL_A*10', 'RR_A*10', 'RL_B Brake', 'RR_B Brake', 'M_B*10', 'Location','northeast');
+grid on; xlim([0.5 N+0.5]);
+for c=1:N; text(c, 3500, num2str(c), 'HorizontalAlignment','center', 'FontWeight','bold'); end
+end
