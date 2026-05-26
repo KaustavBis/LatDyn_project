@@ -1,0 +1,19 @@
+# ── Simulink build & cache artefacts ─────────────────────────────────────
+*.slxc
+slprj/
+codegen/
+
+# ── MATLAB temporary / autosave files ────────────────────────────────────
+*.asv
+*.m~
+temp_out_*.mat
+
+# ── MATLAB MEX binaries ───────────────────────────────────────────────────
+*.mexa64
+*.mexw64
+*.mexmaci64
+*.mexmaca64
+
+# ── OS noise ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
